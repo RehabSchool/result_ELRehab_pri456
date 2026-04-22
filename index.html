@@ -248,9 +248,9 @@ td.grade {
     <div id="result" class="result" aria-live="polite"></div>
   </div>
 </div>
-
 <script>
 const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTkvYd7tiIKOh6oY7g0evHaEuFkVdmO2mAdMtKYZkpEu18VG-C34ndOC6mt4QMOmA/pub?gid=1211433223&single=true&output=csv';
+
 const resultEl = document.getElementById('result');
 const searchBtn = document.getElementById('searchBtn');
 const nidInput = document.getElementById('nid');
@@ -305,6 +305,7 @@ async function loadSheet(){
       const nid=(r[nidIndex]||'').replace(/\s+/g,'').trim(); 
       if(nid) lookupByNid[nid]=r; 
     });
+
   }catch(err){ 
     console.error(err); 
     resultEl.innerHTML=`<div class="error">خطأ: ${err.message}</div>`; 
@@ -317,55 +318,142 @@ function showResultRow(row){
     return; 
   }
 
-  const basicFields = ['اسم الطالب', 'الرقم القومى','الصف الدراسي', 'الفصل','الامتحان' ];
+  const basicFields = ['اسم الطالب','الرقم القومى','الصف الدراسي','الفصل','الامتحان'];
+
+  // =========================
+  // جدول البيانات الأساسية
+  // =========================
   let basicTable = '<table class="basic-info-table"><tbody><tr>';
+
   basicFields.forEach(h=>{
     if(indexByHeader[h] !== undefined){
       basicTable += `<th>${h}</th>`;
     }
   });
+
   basicTable += '</tr><tr>';
- basicFields.forEach(h=>{
-  if(indexByHeader[h] !== undefined){
-    const value = row[indexByHeader[h]] || '';
-    basicTable += `<td data-label="${h}">${value}</td>`;
-  }
-});
+
+  basicFields.forEach(h=>{
+    if(indexByHeader[h] !== undefined){
+      const value = row[indexByHeader[h]] || '';
+      basicTable += `<td data-label="${h}">${value}</td>`;
+    }
+  });
 
   basicTable += '</tr></tbody></table>';
 
-  let tableHtml = '<table><thead><tr><th>المادة</th><th>درجة الطالب</th></tr></thead><tbody>';
+  // =========================
+  // تقسيم المواد
+  // =========================
+  let mainRows = '';
+  let extraRows = '';
+  let isExtra = false;
+
   headers.forEach(h=>{
-    if(!basicFields.includes(h)){
-      const grade = row[indexByHeader[h]] || '';
-      tableHtml += `<tr>
-                      <td>${h}</td>
-                      <td class="grade">${grade}</td>
-                    </tr>`;
+    if(basicFields.includes(h)) return;
+
+    const cleanHeader = h.replace(/\s+/g,'').toLowerCase();
+
+    // اكتشاف بداية المواد غير المضافة بأي شكل
+    if(
+      cleanHeader.includes('غير') &&
+      cleanHeader.includes('مضاف')
+    ){
+      isExtra = true;
+      return;
+    }
+
+    const grade = row[indexByHeader[h]] || '';
+
+    // تجاهل الأعمدة الفاضية
+    if(h.trim() === '') return;
+
+    if(isExtra){
+      extraRows += `
+        <tr>
+          <td>${h}</td>
+          <td class="grade">${grade}</td>
+        </tr>
+      `;
+    } else {
+      mainRows += `
+        <tr>
+          <td>${h}</td>
+          <td class="grade">${grade}</td>
+        </tr>
+      `;
     }
   });
-  tableHtml += '</tbody></table>';
 
-  resultEl.innerHTML = basicTable + tableHtml;
+  // =========================
+  // جدول المواد الأساسية
+  // =========================
+  let table1 = `
+    <table>
+      <thead>
+        <tr>
+          <th>المادة</th>
+          <th>درجة الطالب</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${mainRows}
+      </tbody>
+    </table>
+  `;
+
+  // =========================
+  // جدول المواد غير المضافة
+  // =========================
+  let table2 = '';
+
+  if(extraRows.trim() !== ''){
+    table2 = `
+      <table>
+        <thead>
+          
+          <tr>
+           <th colspan="2" style="background:#fff; color:#000;">
+  المواد غير المضافة للمجموع
+</th>
+          </tr>
+          <tr>
+            <th>المادة</th>
+            <th>درجة الطالب</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${extraRows}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // =========================
+  // عرض النتيجة
+  // =========================
+  resultEl.innerHTML = basicTable + table1 + table2;
 }
-
 searchBtn.addEventListener('click', async () => {
   const nid = (nidInput.value || '').replace(/\s+/g,'').trim();
+
   if(!nid){ 
     resultEl.innerHTML = '<div class="error">من فضلك ادخل الرقم القومي.</div>'; 
     return; 
   }
+
   await loadSheet();
   const row = lookupByNid[nid];
   showResultRow(row);
 });
 
-
 nidInput.addEventListener('keydown',(e)=>{ 
   if(e.key==='Enter') searchBtn.click(); 
 });
 
+// تحميل البيانات أول مرة
 loadSheet();
 </script>
 </body>
 </html>
+
